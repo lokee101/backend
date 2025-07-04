@@ -17,8 +17,10 @@ def create_order():
         amount = data.get('amount', 50000)  # Amount in paise (e.g., 50000 paise = INR 500)
         currency = data.get('currency', 'INR')
         
-        # Changed: Use uuid.uuid4().hex to generate a unique receipt ID
-        receipt = f"receipt_{current_app.config['CURRENT_USER_ID']}_{uuid.uuid4().hex}"
+        # Changed: Generate a shorter, unique receipt ID using a truncated UUID.
+        # A UUID hex string is 32 chars. Taking the first 30 chars and adding a prefix
+        # ensures it's unique enough and under the 40-character limit (5 + 30 = 35 chars).
+        receipt = f"rcpt_{uuid.uuid4().hex[:30]}"
 
         client = razorpay.Client(auth=(current_app.config['RAZORPAY_KEY_ID'], current_app.config['RAZORPAY_KEY_SECRET']))
 
