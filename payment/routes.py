@@ -1,9 +1,14 @@
 import razorpay
 from flask import request, jsonify, current_app
 from payment import payment_bp
-from utils.access_control import grant_pro_access
 import hmac
 import hashlib
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from utils.access_control import grant_pro_access
+
 
 @payment_bp.route('/create-order', methods=['POST'])
 def create_order():
