@@ -1,0 +1,28 @@
+# Environment variables
+.env
+
+# Python specific files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python/
+env/
+venv/
+.ipynb_checkpoints
+.pytest_cache
+
+# IDE specific files (e.g., VS Code)
+.vscode/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# React build output (if you decide to build frontend in backend repo)
+# If your frontend is truly separate and only deployed to Netlify,
+# you might not need these in the backend's .gitignore.
+# However, if you ever copy frontend build output to backend's static,
+# you'd want to ignore those.
+# /static/build/
+# /static/dist/
