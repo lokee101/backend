@@ -192,12 +192,14 @@ class NewsScraper:
 
     def scrape_article_content(self, article_url):
         """
-        Scrapes the full content, description, and image of a single news article.
-        Returns a dictionary with 'content', 'description', and 'image_url'.
+        Scrapes the full content, description, author, in-article summary, and image of a single news article.
+        Returns a dictionary with 'content', 'description', 'author', 'in_article_summary', and 'image_url'.
         """
         article_data = {
             'content': "Failed to scrape article content.",
             'description': None,
+            'author': None,             # New field for author
+            'in_article_summary': None, # New field for in-article summary
             'image_url': None
         }
         try:
@@ -205,12 +207,53 @@ class NewsScraper:
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'html.parser')
 
-            # --- Extract Description ---
+            # --- Extract Title ---
+            # Reuters titles are often in h1 with specific data-testid or classes
+            title_tag = soup.select_one('h1[data-testid="ArticleHeader_headline"]') or \
+                        soup.select_one('h1.article-header__title') or \
+                        soup.select_one('h1.Headline-headline-2FX_p') or \
+                        soup.find('h1')
+            if title_tag:
+                # Update the title in article_data (though it's usually already in the main dict)
+                # This is more for completeness if this function were called standalone
+                article_data['title'] = title_tag.get_text(strip=True)
+
+            # --- Extract Author (By who) ---
+            # Reuters author information is often in a span or div with specific classes/data-testids
+            author_tag = soup.select_one('p[data-testid="BylineBar_byline"]') or \
+                         soup.select_one('div.byline__name') or \
+                         soup.select_one('span.byline-name') or \
+                         soup.find('div', class_=re.compile(r'byline|author|writer', re.IGNORECASE))
+            if author_tag:
+                author_text = author_tag.get_text(strip=True)
+                # Clean up "By " prefix if present
+                article_data['author'] = re.sub(r'^By\s+', '', author_text, flags=re.IGNORECASE)
+
+
+            # --- Extract Description (Meta Tags) ---
             # Prioritize og:description, then name="description"
             description_tag = soup.find('meta', attrs={'property': 'og:description'}) or \
                               soup.find('meta', attrs={'name': 'description'})
             if description_tag and description_tag.get('content'):
                 article_data['description'] = description_tag['content'].strip()
+
+            # --- Extract In-Article Summary Area ---
+            # Reuters often has a lead paragraph or a specific summary div at the start
+            in_article_summary_selectors = [
+                'p[data-testid="ArticleBody_lead_paragraph"]', # Common lead paragraph
+                'div.article-body > p:first-of-type', # First paragraph in the article body
+                'div.ArticleBody_lede__2g1Xp', # Specific lede class
+                'div.ArticleBody_summary__2g1Xp', # Specific summary class
+                'div[itemprop="articleBody"] p:first-of-type', # First paragraph in schema body
+            ]
+            for selector in in_article_summary_selectors:
+                summary_tag = soup.select_one(selector)
+                if summary_tag:
+                    summary_text = summary_tag.get_text(strip=True)
+                    if summary_text and len(summary_text) > 50: # Ensure it's substantial
+                        article_data['in_article_summary'] = summary_text
+                        break # Found a good summary, stop searching
+
 
             # --- Extract Image URL ---
             # 1. Try Open Graph image (most reliable for social sharing images)
@@ -226,6 +269,8 @@ class NewsScraper:
                     'img.media-object__image__3tY4J', # Specific class for media objects
                     'img[itemprop="image"]', # Schema.org image
                     'meta[itemprop="image"]', # Schema.org image meta tag
+                    'div.Image_container img', # Another common image container
+                    'div.MediaItem_image img', # Another common image container
                 ]
                 for selector in article_image_selectors:
                     # If it's a meta tag, get content attribute
@@ -280,6 +325,7 @@ class NewsScraper:
                         'body-content', # Generic body content
                         'main-content', # Generic main content
                         'StandardArticleBody_body', # Older Reuters class
+                        'ArticleBody_body__2g1Xp', # Another common Reuters body class
                     ]
                 )
             ) or soup.find('article') or soup.find('main') or soup.find('body') # Fallback to body
