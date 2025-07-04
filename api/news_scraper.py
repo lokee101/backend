@@ -37,7 +37,7 @@ class NewsScraper:
     def scrape_headlines(self):
         """
         Scrapes the latest news headlines from all configured news sources.
-        Returns a list of dictionaries, each containing 'id', 'title', 'url', and 'source'.
+        Returns a list of dictionaries, each containing 'id', 'title', 'url', 'source', 'snippet', and 'image_url'.
         Attempts to get around 30-40 articles in total.
         """
         all_headlines = []
@@ -157,6 +157,35 @@ class NewsScraper:
                         if not snippet:
                             snippet = title[:100] + '...' if len(title) > 100 else title
 
+                        # --- Attempt to find an image URL for the headline card ---
+                        image_url = None
+                        # Look for an image tag within the same parent container as the link
+                        parent_container = link.find_parent(class_=re.compile(r'story-card|media-story-card|cluster-item|article-excerpt', re.IGNORECASE))
+                        if parent_container:
+                            # Specific Reuters thumbnail selectors within headline containers
+                            thumbnail_selectors = [
+                                'img[data-testid="media-image"]',
+                                'img.media-story-card__image__2g1Xp',
+                                'img.media-object__image__3tY4J',
+                                'img.image__image__1g1Xp', # Generic image class
+                                'img[src*="thumb"]', # Images with 'thumb' in src
+                                'img[src*="small"]', # Images with 'small' in src
+                            ]
+                            for img_selector in thumbnail_selectors:
+                                img_tag = parent_container.select_one(img_selector)
+                                if img_tag and img_tag.get('src'):
+                                    img_src = urljoin(source_url, img_tag['src'])
+                                    # Filter out tiny icons/placeholders, ensure it's a valid image URL
+                                    if not re.search(r'(logo|icon|spacer|thumb-small|ads|gif|svg)\.(png|jpg|jpeg)', img_src, re.IGNORECASE) and \
+                                       not re.search(r'data:image', img_src, re.IGNORECASE) and \
+                                       ('width' in img_tag.attrs and int(img_tag['width']) > 50 or 'height' in img_tag.attrs and int(img_tag['height']) > 50):
+                                        image_url = img_src
+                                        break
+                        
+                        # Fallback to a generic placeholder if no image is found for the headline
+                        if not image_url:
+                            image_url = "https://placehold.co/400x160/4B0082/FFFFFF?text=Image+Missing"
+
 
                         article_id = str(uuid.uuid4())
                         all_headlines.append({
@@ -164,7 +193,8 @@ class NewsScraper:
                             'title': title,
                             'url': full_url,
                             'source': source_name,
-                            'snippet': snippet # Add the scraped snippet here
+                            'snippet': snippet, # Add the scraped snippet here
+                            'image_url': image_url # Add the scraped image URL here
                         })
                         # Store in global articles_db for later retrieval
                         current_app.config['ARTICLES_DB'][article_id] = {
@@ -173,7 +203,7 @@ class NewsScraper:
                             'source': source_name,
                             'content': None, # Content will be scraped on demand
                             'description': None, # Description will be scraped on demand (from meta tags of actual article)
-                            'image_url': None, # Image will be scraped on demand
+                            'image_url': image_url, # Store image_url here too
                             'snippet': snippet # Store snippet here too
                         }
                         
