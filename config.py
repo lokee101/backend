@@ -27,7 +27,7 @@ class Config:
     # News scraping configuration
     # Define multiple news sources as a list of dictionaries
     NEWS_SOURCES = [
-        {'name': 'Times of India', 'url': 'https://timesofindia.indiatimes.com/'},
+        {'name': 'Reuters', 'url': 'https://www.reuters.com/'},
     ]
 
 class DevelopmentConfig(Config):

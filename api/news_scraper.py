@@ -57,16 +57,16 @@ class NewsScraper:
                 soup = BeautifulSoup(response.text, 'html.parser')
 
                 potential_links = []
-                # Times of India specific headline selectors (based on common patterns)
+                # Reuters specific headline selectors (based on common patterns)
                 # Look for links within common news listing containers
                 for selector in [
-                    '.listing5 li a', # Common for latest news lists
-                    '.top-story a', # Top story links
-                    '.section_item a', # General section items
-                    '.articles a', # Generic article links
-                    'div[class*="card"] a', # Links within elements with "card" in their class
-                    'div[data-tb-region="news"] a', # Data attributes
-                    'h2 a', 'h3 a', 'h4 a', 'h5 a', # Links within common heading tags
+                    'a[data-testid="Link"]', # Common data-testid for links on Reuters
+                    'a.media-story-card__heading__2g1Xp', # Specific class for headline links
+                    'div.story-content a', # Links within story content divs
+                    'div.card-content a', # Links within general card content
+                    'div.cluster-item a', # Links within cluster items
+                    'div.article-excerpt a', # Links within article excerpts
+                    'h3 a', 'h2 a', # Links within common heading tags for headlines
                 ]:
                     potential_links.extend(soup.select(selector))
                 
@@ -92,9 +92,9 @@ class NewsScraper:
                     # Enhanced filtering for valid news article links based on common patterns
                     # and avoiding navigation/image/video/social links.
                     if (
-                        re.search(r'/\d{4}/\d{2}/\d{2}/', full_url) or # Date pattern
-                        re.search(r'/(news|articleshow|story|india|world|business|sports|entertainment|tech|auto|education)/', full_url) # Category pattern
-                    ) and not re.search(r'(photogallery|videos|elections|liveblog|tags|contact|about|privacy|terms|login|signup|#|javascript:|mailto:|/amp/|/web-stories/|/photos/|/videos|/live-updates|/topic|/authors|/rss|/sitemap|/subscribe|/apps|/partner|/advertise|/feedback|/careers|/terms-of-use|/privacy-policy|/cookie-policy|/disclaimer|/archive|/newsletter|/faq|/press-release|/events|/jobs|/deals|/shop|/gallery|/embed|/widget|/premium|/plus|/epaper|/contactus)', full_url, re.IGNORECASE):
+                        re.search(r'/(article|news|business|markets|world|technology|sports|lifestyle|science|health|legal|breakingviews)/', full_url) and
+                        not re.search(r'(photogallery|videos|elections|liveblog|tags|contact|about|privacy|terms|login|signup|#|javascript:|mailto:|/amp/|/web-stories/|/photos/|/videos|/live-updates|/topic|/authors|/rss|/sitemap|/subscribe|/apps|/partner|/advertise|/feedback|/careers|/terms-of-use|/privacy-policy|/cookie-policy|/disclaimer|/archive|/newsletter|/faq|/press-release|/events|/jobs|/deals|/shop|/gallery|/embed|/widget|/premium|/plus|/epaper|/contactus)', full_url, re.IGNORECASE)
+                    ):
                         
                         # Ensure the link is within the same domain or a subdomain
                         parsed_source_domain = self._get_domain(source_url)
@@ -111,16 +111,14 @@ class NewsScraper:
                         # --- Attempt to find a snippet/description on the homepage near the headline ---
                         snippet = None
                         # Look for a sibling or child element that might contain a short snippet
-                        # These are common patterns for Times of India homepage snippets
+                        # These are common patterns for Reuters homepage snippets
                         for selector in [
-                            '._description', # Specific class for description
-                            '._snippet', # Another specific class
-                            'span.brief', # Common for short briefs
-                            'div.summary', # General summary div
-                            'p.description', # Paragraph with description class
-                            'p.card-description', # Common in card layouts
-                            'div.content-wrapper p', # Paragraph within a content wrapper
-                            'div.inner-content p', # Paragraph within an inner content div
+                            'p.media-story-card__description__2g1Xp', # Specific class for description
+                            'p[data-testid="Body"]', # Common data-testid for body text/snippet
+                            'div.story-content p', # Paragraph within story content divs
+                            'div.card-content p', # Paragraph within general card content
+                            'div.article-excerpt p', # Paragraph within article excerpts
+                            'p.text__text__1FZLe', # Common text class
                         ]:
                             # Try finding a direct child or a sibling's child
                             potential_snippet_tag = link.select_one(selector) or \
@@ -220,26 +218,22 @@ class NewsScraper:
             if image_tag and image_tag.get('content'):
                 article_data['image_url'] = image_tag['content'].strip()
             else:
-                # 2. Try specific Times of India image selectors
-                # These are common patterns for main images on TOI articles
-                toi_image_selectors = [
-                    'img.img-fluid', # Common class for responsive images
-                    'img.media-img', # Another common class
-                    'div.image-container img', # Image within a container
-                    'figure img', # Image within a figure tag
-                    'div[itemprop="articleBody"] img', # Image within the article body schema
-                    'div[data-tb-region="article-img"] img', # Data attribute for article image
-                    '#article-image img', # If there's an ID for the main image
-                    '.article-top-image img', # Common wrapper class
-                    '.main-image img', # Another common main image class
+                # 2. Try specific Reuters image selectors
+                article_image_selectors = [
+                    'img[data-testid="media-image"]', # Common data-testid for main image
+                    'div.article-image-container img', # Image within a specific container
+                    'figure.article-picture img', # Image within a figure with article-picture class
+                    'img.media-object__image__3tY4J', # Specific class for media objects
+                    'img[itemprop="image"]', # Schema.org image
                     'meta[itemprop="image"]', # Schema.org image meta tag
                 ]
-                for selector in toi_image_selectors:
+                for selector in article_image_selectors:
                     # If it's a meta tag, get content attribute
                     if selector.startswith('meta'):
                         meta_tag = soup.select_one(selector)
                         if meta_tag and meta_tag.get('content'):
                             img_src = urljoin(article_url, meta_tag['content'])
+                            # Basic check to avoid very small or irrelevant images
                             if not re.search(r'(logo|icon|spacer|thumb|small|ads)\.(png|jpg|jpeg|gif|svg)', img_src, re.IGNORECASE):
                                 article_data['image_url'] = img_src
                                 break
@@ -248,6 +242,7 @@ class NewsScraper:
                         if img_tag and img_tag.get('src'):
                             # Ensure it's a full URL and not a tiny icon/spacer
                             img_src = urljoin(article_url, img_tag['src'])
+                            # Basic check to avoid very small or irrelevant images
                             if not re.search(r'(logo|icon|spacer|thumb|small|ads)\.(png|jpg|jpeg|gif|svg)', img_src, re.IGNORECASE):
                                 article_data['image_url'] = img_src
                                 break # Found a good candidate, stop searching
@@ -257,9 +252,7 @@ class NewsScraper:
                 content_div = soup.find(
                     lambda tag: tag.name == 'div' and any(
                         cls in tag.get('class', []) for cls in [
-                            'article-content', 'story-content', 'body-content', 'news-body',
-                            'td-post-content', 'content-area', 'entry-content', 'single-post-content',
-                            'article-body', 'inner-article', 'main-content', 'post-content'
+                            'article-body', 'text__text__1FZLe', 'body-content', 'main-content'
                         ]
                     )
                 ) or soup.find('article') or soup.find('main')
@@ -278,28 +271,22 @@ class NewsScraper:
 
 
             # --- Extract Full Article Content ---
-            # More robust generic selectors for article content
-            # Try common article containers first
+            # Reuters specific content selectors
             content_div = soup.find(
                 lambda tag: tag.name == 'div' and any(
                     cls in tag.get('class', []) for cls in [
-                        'Normal', # Very common for TOI paragraphs
-                        'article-content', 'story-content', 'body-content', 'news-body',
-                        'td-post-content', 'content-area', 'entry-content', 'single-post-content',
-                        'article-body', 'inner-article', 'main-content', 'post-content',
-                        'clearfix', # Sometimes the main content is within a clearfix div
-                        'article-data', # Another common TOI content wrapper
-                        'section-article', # Another common TOI content wrapper
-                        'content-section', # Another common TOI content wrapper
-                        'article_content', # Another common TOI content wrapper
-                        'main-content-area', # Another common TOI content wrapper
+                        'article-body', # Main article content div
+                        'text__text__1FZLe', # Common text class for paragraphs
+                        'body-content', # Generic body content
+                        'main-content', # Generic main content
+                        'StandardArticleBody_body', # Older Reuters class
                     ]
                 )
             ) or soup.find('article') or soup.find('main') or soup.find('body') # Fallback to body
 
             if content_div:
                 # Remove unwanted elements that are typically not part of the main article text
-                for script_or_style in content_div(['script', 'style', 'header', 'footer', 'nav', 'aside', 'form', 'iframe', 'button', 'figcaption', 'figure', 'img', 'video', 'audio', 'svg', 'canvas', 'amp-img', 'blockquote', '.ads', '.ad-container', '.social-share', '.read-more', '.related-articles', '.comments-section', '.paywall', '#paywall', '.signin', '#signin']):
+                for script_or_style in content_div(['script', 'style', 'header', 'footer', 'nav', 'aside', 'form', 'iframe', 'button', 'figcaption', 'figure', 'img', 'video', 'audio', 'svg', 'canvas', 'amp-img', 'blockquote', '.ads', '.ad-container', '.social-share', '.read-more', '.related-articles', '.comments-section', '.paywall', '#paywall', '.signin', '#signin', '.legals', '.disclaimer', '.byline', '.timestamp', '.ArticleHeader_container', '.ArticleHeader_byline', '.ArticleHeader_date', '.ArticleHeader_share']):
                     script_or_style.decompose() # Remove unwanted elements
 
                 # Get all text from direct children paragraphs or text nodes
@@ -320,7 +307,7 @@ class NewsScraper:
                 article_text = re.sub(r'(\n\s*){2,}', '\n\n', article_text) # Reduce multiple newlines
                 
                 # Remove common "read more" or "related articles" phrases that might be scraped
-                article_text = re.sub(r'read more.*|related articles.*|also read.*|further reading.*|topics.*|tags.*|comments.*|share this article.*|follow us.*|sign in.*|subscribe now.*|create an account.*|login to read.*', '', article_text, flags=re.IGNORECASE | re.DOTALL).strip()
+                article_text = re.sub(r'read more.*|related articles.*|also read.*|further reading.*|topics.*|tags.*|comments.*|share this article.*|follow us.*|sign in.*|subscribe now.*|create an account.*|login to read.*|our standards: the reuters trust principles.*|thomson reuters.*|reporting by.*|editing by.*|our standards.*', '', article_text, flags=re.IGNORECASE | re.DOTALL).strip()
                 
                 article_data['content'] = article_text
             else:
@@ -335,4 +322,3 @@ class NewsScraper:
             article_data['content'] = "Failed to scrape article content due to an unexpected error."
         
         return article_data
-
