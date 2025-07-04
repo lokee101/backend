@@ -1,19 +1,27 @@
 from flask import request, jsonify, current_app
 from api import api_bp
-from api.news_scraper import NewsScraper
-from api.summarizer import AIService
+# Removed direct imports of NewsScraper and AIService here
+
 from utils.access_control import check_access_limit
 
-# Initialize scraper and AI service globally (or within blueprint context)
-# These will use the config loaded in app.py
-news_scraper = NewsScraper(current_app.config['NEWS_SOURCES']) # Pass the list of sources
-ai_service = AIService() # This will raise an error if AI_API_KEY is not set
+# Helper function to get the initialized services
+def get_news_scraper():
+    """Retrieves the NewsScraper instance from app.config."""
+    return current_app.config.get('NEWS_SCRAPER_INSTANCE')
+
+def get_ai_service():
+    """Retrieves the AIService instance from app.config."""
+    return current_app.config.get('AI_SERVICE_INSTANCE')
 
 @api_bp.route('/news', methods=['GET'])
 def get_news_headlines():
     """
     Fetches and returns the latest news headlines from multiple sources.
     """
+    news_scraper = get_news_scraper()
+    if not news_scraper:
+        return jsonify({"error": "News scraper not initialized."}), 500
+
     headlines = news_scraper.scrape_headlines()
     if not headlines:
         return jsonify({"message": "Could not fetch headlines from any source. Please try again later."}), 500
@@ -25,6 +33,10 @@ def get_article_content(article_id):
     Retrieves the full content of a specific article by ID.
     If content is not yet scraped, it scrapes it on demand.
     """
+    news_scraper = get_news_scraper()
+    if not news_scraper:
+        return jsonify({"error": "News scraper not initialized."}), 500
+
     articles_db = current_app.config.get('ARTICLES_DB')
     article_data = articles_db.get(article_id)
 
@@ -56,6 +68,14 @@ def summarize_article():
     Summarizes an article. Accepts either article_id or raw text.
     Enforces free tier summary limits.
     """
+    ai_service = get_ai_service()
+    if not ai_service:
+        return jsonify({"error": "AI service not initialized."}), 500
+
+    news_scraper = get_news_scraper() # Needed if article_id is provided
+    if not news_scraper:
+        return jsonify({"error": "News scraper not initialized."}), 500
+
     data = request.get_json()
     article_id = data.get('article_id')
     raw_text = data.get('text')
@@ -96,6 +116,14 @@ def chat_with_article():
     Provides a chatbot interface using article content as context.
     Enforces free tier chat limits.
     """
+    ai_service = get_ai_service()
+    if not ai_service:
+        return jsonify({"error": "AI service not initialized."}), 500
+
+    news_scraper = get_news_scraper() # Needed if article_id is provided
+    if not news_scraper:
+        return jsonify({"error": "News scraper not initialized."}), 500
+
     data = request.get_json()
     article_id = data.get('article_id')
     question = data.get('question')

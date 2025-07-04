@@ -1,11 +1,8 @@
 import os
-from flask import Flask, jsonify, session # Removed render_template, redirect, url_for, render_template
+from flask import Flask, jsonify, session
 from datetime import datetime, timedelta
 from config import get_config
 import uuid
-import sys
-sys.path.append(os.path.abspath(os.path.dirname(__file__)))
-
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -101,15 +98,22 @@ if __name__ == '__main__':
         print("Created a .env file. Please fill in your API keys and secrets.")
 
     # Create necessary directories if they don't exist
-    # The 'templates' and 'static' directories are no longer strictly needed for serving HTML,
-    # but keeping them ensures the directory structure matches the initial request.
-    os.makedirs('templates', exist_ok=True) # Can be removed if you prefer a cleaner structure
-    os.makedirs('static', exist_ok=True)   # Can be removed if you prefer a cleaner structure
+    os.makedirs('templates', exist_ok=True)
+    os.makedirs('static', exist_ok=True)
     os.makedirs('utils', exist_ok=True)
     os.makedirs('payment', exist_ok=True)
     os.makedirs('api', exist_ok=True)
     os.makedirs('frontend', exist_ok=True) # Placeholder
 
-    # Removed the creation of templates/index.html as it's no longer served by Flask
+    # --- Initialize NewsScraper and AIService within an application context ---
+    # This ensures current_app.config is available when they are instantiated.
+    # These instances are then stored in app.config for later retrieval in routes.
+    from api.news_scraper import NewsScraper
+    from api.summarizer import AIService
+    with app.app_context():
+        app.config['NEWS_SCRAPER_INSTANCE'] = NewsScraper(app.config['NEWS_SOURCES'])
+        app.config['AI_SERVICE_INSTANCE'] = AIService()
+        # The AIService constructor might still raise an error if API keys are truly missing,
+        # but it will now do so within the context.
 
     app.run(debug=True) # debug=True for development, set FLASK_ENV=production for production
