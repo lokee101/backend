@@ -283,18 +283,23 @@ class NewsScraper:
             content_div = soup.find(
                 lambda tag: tag.name == 'div' and any(
                     cls in tag.get('class', []) for cls in [
+                        'Normal', # Very common for TOI paragraphs
                         'article-content', 'story-content', 'body-content', 'news-body',
                         'td-post-content', 'content-area', 'entry-content', 'single-post-content',
                         'article-body', 'inner-article', 'main-content', 'post-content',
                         'clearfix', # Sometimes the main content is within a clearfix div
-                        'Normal', # Common class for paragraphs in some CMS
+                        'article-data', # Another common TOI content wrapper
+                        'section-article', # Another common TOI content wrapper
+                        'content-section', # Another common TOI content wrapper
+                        'article_content', # Another common TOI content wrapper
+                        'main-content-area', # Another common TOI content wrapper
                     ]
                 )
             ) or soup.find('article') or soup.find('main') or soup.find('body') # Fallback to body
 
             if content_div:
                 # Remove unwanted elements that are typically not part of the main article text
-                for script_or_style in content_div(['script', 'style', 'header', 'footer', 'nav', 'aside', 'form', 'iframe', 'button', 'figcaption', 'figure', 'img', 'video', 'audio', 'svg', 'canvas', 'amp-img', 'blockquote', '.ads', '.ad-container', '.social-share', '.read-more', '.related-articles', '.comments-section']):
+                for script_or_style in content_div(['script', 'style', 'header', 'footer', 'nav', 'aside', 'form', 'iframe', 'button', 'figcaption', 'figure', 'img', 'video', 'audio', 'svg', 'canvas', 'amp-img', 'blockquote', '.ads', '.ad-container', '.social-share', '.read-more', '.related-articles', '.comments-section', '.paywall', '#paywall', '.signin', '#signin']):
                     script_or_style.decompose() # Remove unwanted elements
 
                 # Get all text from direct children paragraphs or text nodes
@@ -315,7 +320,7 @@ class NewsScraper:
                 article_text = re.sub(r'(\n\s*){2,}', '\n\n', article_text) # Reduce multiple newlines
                 
                 # Remove common "read more" or "related articles" phrases that might be scraped
-                article_text = re.sub(r'read more.*|related articles.*|also read.*|further reading.*|topics.*|tags.*|comments.*|share this article.*|follow us.*', '', article_text, flags=re.IGNORECASE | re.DOTALL).strip()
+                article_text = re.sub(r'read more.*|related articles.*|also read.*|further reading.*|topics.*|tags.*|comments.*|share this article.*|follow us.*|sign in.*|subscribe now.*|create an account.*|login to read.*', '', article_text, flags=re.IGNORECASE | re.DOTALL).strip()
                 
                 article_data['content'] = article_text
             else:
