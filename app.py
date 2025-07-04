@@ -3,7 +3,10 @@ from flask import Flask, jsonify, session
 from datetime import datetime, timedelta
 from config import get_config
 import uuid
+from flask_cors import CORS
 
+
+CORS(app)  # allow all origins by default
 # Initialize Flask app
 app = Flask(__name__)
 
