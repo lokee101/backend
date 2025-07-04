@@ -27,10 +27,7 @@ class Config:
     # News scraping configuration
     # Define multiple news sources as a list of dictionaries
     NEWS_SOURCES = [
-        {'name': 'NDTV', 'url': 'https://www.ndtv.com/latest'},
-        {'name': 'Hindustan Times', 'url': 'https://www.hindustantimes.com/latest-news'},
         {'name': 'Times of India', 'url': 'https://timesofindia.indiatimes.com/'},
-        # Add more Indian news sources here as needed
     ]
 
 class DevelopmentConfig(Config):
