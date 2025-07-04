@@ -5,11 +5,9 @@ from config import get_config
 import uuid
 from flask_cors import CORS
 
-
+app = Flask(__name__)
 CORS(app)  # allow all origins by default
 # Initialize Flask app
-app = Flask(__name__)
-
 # Load configuration based on environment
 app.config.from_object(get_config())
 
