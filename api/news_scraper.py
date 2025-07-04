@@ -245,6 +245,7 @@ class NewsScraper:
                 'div.ArticleBody_lede__2g1Xp', # Specific lede class
                 'div.ArticleBody_summary__2g1Xp', # Specific summary class
                 'div[itemprop="articleBody"] p:first-of-type', # First paragraph in schema body
+                'div.article-body_content__17lYj > p:first-of-type', # First paragraph within the specific content div
             ]
             for selector in in_article_summary_selectors:
                 summary_tag = soup.select_one(selector)
@@ -297,7 +298,7 @@ class NewsScraper:
                 content_div = soup.find(
                     lambda tag: tag.name == 'div' and any(
                         cls in tag.get('class', []) for cls in [
-                            'article-body', 'text__text__1FZLe', 'body-content', 'main-content'
+                            'article-body', 'text__text__1FZLe', 'body-content', 'main-content', 'article-body_content__17lYj' # Added this
                         ]
                     )
                 ) or soup.find('article') or soup.find('main')
@@ -326,6 +327,7 @@ class NewsScraper:
                         'main-content', # Generic main content
                         'StandardArticleBody_body', # Older Reuters class
                         'ArticleBody_body__2g1Xp', # Another common Reuters body class
+                        'article-body_content__17lYj', # Added this specific class from screenshot
                     ]
                 )
             ) or soup.find('article') or soup.find('main') or soup.find('body') # Fallback to body
