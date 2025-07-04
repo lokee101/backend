@@ -56,22 +56,27 @@ class NewsScraper:
                 response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
                 soup = BeautifulSoup(response.text, 'html.parser')
 
-                # --- NEW STRATEGY FOR REUTERS HEADLINES ---
-                # Target common article card elements that usually contain the title, link, and image.
-                # These are based on inspecting Reuters.com's homepage structure for news listings.
+                # --- REVISED STRATEGY FOR REUTERS HEADLINES ---
+                # Target common article card elements that contain the image, title, and link.
+                # Based on typical Reuters homepage structure, focusing on more specific article containers.
                 article_card_selectors = [
-                    'div[data-testid="MediaStoryCard"]', # Primary card element
-                    'div.media-story-card', # Another common class for story cards
-                    'div.story-card', # Generic story card
-                    'div.cluster-item', # For news clusters
-                    'div.card', # General card element
-                    'div.story-container', # Another common container
-                    'li.story-item', # Sometimes list items are used
-                    'div.item-container', # Generic item container
+                    'div.media-story-card', # Primary card element for most stories
+                    'div[data-testid="MediaStoryCard"]', # Alternative data-testid for story cards
+                    'div.story-card', # Generic story card (might be less specific)
+                    'div.cluster-item', # For news clusters (often has multiple stories)
+                    'div.card', # General card element (could be too broad, but included for robustness)
+                    'div.story-container', # Another common container for a news item
+                    'li.story-item', # Sometimes list items are used for news feeds
+                    'div[class*="FeedItem"]', # Common pattern for feed items
+                    'div[class*="ArticleCard"]', # Common pattern for article cards
                 ]
 
+                # Select all potential article card elements
                 for card_element in soup.select(', '.join(article_card_selectors)):
+                    # Try to find the primary link within this card element
                     link_tag = card_element.select_one('a[data-testid="Link"], a.media-story-card__heading__2g1Xp, h3 a, h2 a')
+                    
+                    # If no suitable link is found within this card, skip it
                     if not link_tag:
                         continue
 
@@ -88,9 +93,10 @@ class NewsScraper:
                         full_url = href
 
                     # Enhanced filtering for valid news article links based on common patterns
+                    # This regex helps filter out non-article links like categories or special sections.
                     if (
-                        re.search(r'/(article|news|business|markets|world|technology|sports|lifestyle|science|health|legal|breakingviews)/', full_url) and
-                        not re.search(r'(photogallery|videos|elections|liveblog|tags|contact|about|privacy|terms|login|signup|#|javascript:|mailto:|/amp/|/web-stories/|/photos/|/videos|/live-updates|/topic|/authors|/rss|/sitemap|/subscribe|/apps|/partner|/advertise|/feedback|/careers|/terms-of-use|/privacy-policy|/cookie-policy|/disclaimer|/archive|/newsletter|/faq|/press-release|/events|/jobs|/deals|/shop|/gallery|/embed|/widget|/premium|/plus|/epaper|/contactus)', full_url, re.IGNORECASE)
+                        re.search(r'/(article|news|business|markets|world|technology|sports|lifestyle|science|health|legal|breakingviews|politics|economy|companies|commodities|deals|funds|currencies|wealth|arts|media|entertainment|environment|climate|innovation|space|gaming|oddly-enough|pictures|video)/', full_url) and
+                        not re.search(r'(photogallery|videos|elections|liveblog|tags|contact|about|privacy|terms|login|signup|#|javascript:|mailto:|/amp/|/web-stories/|/photos/|/videos|/live-updates|/topic|/authors|/rss|/sitemap|/subscribe|/apps|/partner|/advertise|/feedback|/careers|/terms-of-use|/privacy-policy|/cookie-policy|/disclaimer|/archive|/newsletter|/faq|/press-release|/events|/jobs|/deals|/shop|/gallery|/embed|/widget|/premium|/plus|/epaper|/contactus|/breakingnews)', full_url, re.IGNORECASE)
                     ):
                         
                         # Ensure the link is within the same domain or a subdomain
@@ -113,6 +119,7 @@ class NewsScraper:
                             'div.story-content p', # Paragraph within story content divs
                             'p.text__text__1FZLe', # Common text class
                             'div.article-excerpt p', # Paragraph within article excerpts
+                            'div[class*="Description"] p', # Generic description div
                         ]
                         for s_selector in snippet_selectors:
                             snippet_tag = card_element.select_one(s_selector)
@@ -153,6 +160,8 @@ class NewsScraper:
                             'img[data-src]', # Sometimes images use data-src attribute
                             'div.media-object__image-wrapper img', # Specific wrapper for images
                             'div.media-story-card__image-wrapper img', # Another specific wrapper
+                            'img.w-full.h-full.object-cover', # Common Tailwind-like classes for images
+                            'img[class*="Image"]', # Generic image class pattern
                         ]
                         for img_selector in thumbnail_selectors:
                             img_tag = card_element.select_one(img_selector) # Search within the current card element
