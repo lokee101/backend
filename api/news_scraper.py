@@ -57,24 +57,26 @@ class NewsScraper:
                 soup = BeautifulSoup(response.text, 'html.parser')
 
                 # --- REVISED STRATEGY FOR REUTERS HEADLINES ---
-                # Target common article card elements that contain the image, title, and link.
-                # Based on typical Reuters homepage structure, focusing on more specific article containers.
+                # Focus on elements that represent a complete news article card on the homepage.
+                # These selectors are based on common patterns for how Reuters structures its main news feed.
+                # We prioritize elements that are likely to contain a title, link, and image together.
                 article_card_selectors = [
-                    'div.media-story-card', # Primary card element for most stories
+                    'div.media-story-card', # The most common card for news stories
                     'div[data-testid="MediaStoryCard"]', # Alternative data-testid for story cards
-                    'div.story-card', # Generic story card (might be less specific)
-                    'div.cluster-item', # For news clusters (often has multiple stories)
-                    'div.card', # General card element (could be too broad, but included for robustness)
-                    'div.story-container', # Another common container for a news item
-                    'li.story-item', # Sometimes list items are used for news feeds
+                    'div.story-card', # A more generic story card class
                     'div[class*="FeedItem"]', # Common pattern for feed items
                     'div[class*="ArticleCard"]', # Common pattern for article cards
+                    'div[data-testid="article-card"]', # Another potential data-testid
+                    'li.story-item', # Sometimes list items are used for news feeds
+                    'div.cluster-item', # For news clusters, might contain multiple stories
+                    'div.basic-card', # Another generic card class
                 ]
 
                 # Select all potential article card elements
                 for card_element in soup.select(', '.join(article_card_selectors)):
                     # Try to find the primary link within this card element
-                    link_tag = card_element.select_one('a[data-testid="Link"], a.media-story-card__heading__2g1Xp, h3 a, h2 a')
+                    # Prioritize links that are likely headlines (e.g., within h2/h3 or with specific data-testids)
+                    link_tag = card_element.select_one('a[data-testid="Link"], h2 a, h3 a, a.media-story-card__heading__2g1Xp')
                     
                     # If no suitable link is found within this card, skip it
                     if not link_tag:
@@ -93,10 +95,10 @@ class NewsScraper:
                         full_url = href
 
                     # Enhanced filtering for valid news article links based on common patterns
-                    # This regex helps filter out non-article links like categories or special sections.
+                    # This regex helps filter out non-article links like categories, special sections, or author pages.
                     if (
-                        re.search(r'/(article|news|business|markets|world|technology|sports|lifestyle|science|health|legal|breakingviews|politics|economy|companies|commodities|deals|funds|currencies|wealth|arts|media|entertainment|environment|climate|innovation|space|gaming|oddly-enough|pictures|video)/', full_url) and
-                        not re.search(r'(photogallery|videos|elections|liveblog|tags|contact|about|privacy|terms|login|signup|#|javascript:|mailto:|/amp/|/web-stories/|/photos/|/videos|/live-updates|/topic|/authors|/rss|/sitemap|/subscribe|/apps|/partner|/advertise|/feedback|/careers|/terms-of-use|/privacy-policy|/cookie-policy|/disclaimer|/archive|/newsletter|/faq|/press-release|/events|/jobs|/deals|/shop|/gallery|/embed|/widget|/premium|/plus|/epaper|/contactus|/breakingnews)', full_url, re.IGNORECASE)
+                        re.search(r'/(article|news|business|markets|world|technology|sports|lifestyle|science|health|legal|politics|economy|companies|commodities|deals|funds|currencies|wealth|arts|media|entertainment|environment|climate|innovation|space|gaming|oddly-enough)/', full_url) and
+                        not re.search(r'(photogallery|videos|elections|liveblog|tags|contact|about|privacy|terms|login|signup|#|javascript:|mailto:|/amp/|/web-stories/|/photos/|/videos|/live-updates|/topic|/authors|/rss|/sitemap|/subscribe|/apps|/partner|/advertise|/feedback|/careers|/terms-of-use|/privacy-policy|/cookie-policy|/disclaimer|/archive|/newsletter|/faq|/press-release|/events|/jobs|/deals|/shop|/gallery|/embed|/widget|/premium|/plus|/epaper|/contactus|/breakingnews|/authors/|/topics/|/search\?)', full_url, re.IGNORECASE)
                     ):
                         
                         # Ensure the link is within the same domain or a subdomain
@@ -120,6 +122,7 @@ class NewsScraper:
                             'p.text__text__1FZLe', # Common text class
                             'div.article-excerpt p', # Paragraph within article excerpts
                             'div[class*="Description"] p', # Generic description div
+                            'div[class*="Snippet"] p', # Generic snippet div
                         ]
                         for s_selector in snippet_selectors:
                             snippet_tag = card_element.select_one(s_selector)
@@ -134,7 +137,7 @@ class NewsScraper:
                             # Try to get text from a general paragraph within the card, excluding the title
                             for p_tag in card_element.find_all('p'):
                                 p_text = p_tag.get_text(strip=True)
-                                if p_text and p_text != title and len(p_text) > 20 and len(p_text) < 300:
+                                if p_text and p_text != title and len(p_text) > 50 and len(p_text) < 300:
                                     snippet = p_text
                                     break
                         
@@ -157,7 +160,7 @@ class NewsScraper:
                             'div.MediaItem_image img', # Another common image container
                             'figure img', # General figure image
                             'img.reuters-asset-image', # A common class for Reuters images
-                            'img[data-src]', # Sometimes images use data-src attribute
+                            'img[data-src]', # Sometimes images use data-src attribute (lazy loading)
                             'div.media-object__image-wrapper img', # Specific wrapper for images
                             'div.media-story-card__image-wrapper img', # Another specific wrapper
                             'img.w-full.h-full.object-cover', # Common Tailwind-like classes for images
@@ -168,9 +171,10 @@ class NewsScraper:
                             if img_tag and (img_tag.get('src') or img_tag.get('data-src')): # Check both src and data-src
                                 img_src = urljoin(source_url, img_tag.get('src') or img_tag.get('data-src'))
                                 # Filter out tiny icons/placeholders, ensure it's a valid image URL
+                                # Also check for minimum dimensions if possible (though not always in HTML attributes)
                                 if not re.search(r'(logo|icon|spacer|thumb-small|ads|gif|svg)\.(png|jpg|jpeg)', img_src, re.IGNORECASE) and \
                                    not re.search(r'data:image', img_src, re.IGNORECASE) and \
-                                   ('width' in img_tag.attrs and int(img_tag['width']) > 50 or 'height' in img_tag.attrs and int(img_tag['height']) > 50):
+                                   (img_tag.get('width') and int(img_tag['width']) > 50 or img_tag.get('height') and int(img_tag['height']) > 50): # Check for actual width/height attributes
                                     image_url = img_src
                                     break
                         
@@ -200,7 +204,7 @@ class NewsScraper:
                         }
                         
                         if len(all_headlines) >= 40: # Limit total articles
-                            return all_headlines
+                            break # Break from the inner loop over card_elements
 
             except requests.exceptions.RequestException as e:
                 current_app.logger.error(f"Network or HTTP error during headline scraping from {source_name}: {e}")
