@@ -50,7 +50,7 @@ class AIService:
 
     def summarize_text(self, text):
         """
-        Summarizes the given text using the configured AI model (OpenRouter or Gemini).
+        Summarizes the given text using the configured AI model (OpenRouter or Gemini). Do not give any punctuations to indicate bold text or anything like that.
         """
         if not text:
             return "No text provided for summarization."
