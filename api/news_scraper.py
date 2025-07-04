@@ -56,29 +56,27 @@ class NewsScraper:
                 response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
                 soup = BeautifulSoup(response.text, 'html.parser')
 
-                potential_links = []
-                # Reuters specific headline selectors (based on common patterns)
-                # Look for links within common news listing containers
-                for selector in [
-                    'a[data-testid="Link"]', # Common data-testid for links on Reuters
-                    'a.media-story-card__heading__2g1Xp', # Specific class for headline links
-                    'div.story-content a', # Links within story content divs
-                    'div.card-content a', # Links within general card content
-                    'div.cluster-item a', # Links within cluster items
-                    'div.article-excerpt a', # Links within article excerpts
-                    'h3 a', 'h2 a', # Links within common heading tags for headlines
-                ]:
-                    potential_links.extend(soup.select(selector))
-                
-                # Also consider all general links as a fallback, then filter
-                potential_links.extend(soup.find_all('a', href=True))
-                
-                # Use a set to store unique links to process
-                unique_links_to_process = {} # {full_url: (title, original_link_tag)}
+                # --- NEW STRATEGY FOR REUTERS HEADLINES ---
+                # Target common article card elements that usually contain the title, link, and image.
+                # These are based on inspecting Reuters.com's homepage structure for news listings.
+                article_card_selectors = [
+                    'div[data-testid="MediaStoryCard"]', # Primary card element
+                    'div.media-story-card', # Another common class for story cards
+                    'div.story-card', # Generic story card
+                    'div.cluster-item', # For news clusters
+                    'div.card', # General card element
+                    'div.story-container', # Another common container
+                    'li.story-item', # Sometimes list items are used
+                    'div.item-container', # Generic item container
+                ]
 
-                for link in potential_links:
-                    href = link.get('href')
-                    title = link.get_text(strip=True)
+                for card_element in soup.select(', '.join(article_card_selectors)):
+                    link_tag = card_element.select_one('a[data-testid="Link"], a.media-story-card__heading__2g1Xp, h3 a, h2 a')
+                    if not link_tag:
+                        continue
+
+                    href = link_tag.get('href')
+                    title = link_tag.get_text(strip=True)
 
                     if not href or not title:
                         continue
@@ -90,7 +88,6 @@ class NewsScraper:
                         full_url = href
 
                     # Enhanced filtering for valid news article links based on common patterns
-                    # and avoiding navigation/image/video/social links.
                     if (
                         re.search(r'/(article|news|business|markets|world|technology|sports|lifestyle|science|health|legal|breakingviews)/', full_url) and
                         not re.search(r'(photogallery|videos|elections|liveblog|tags|contact|about|privacy|terms|login|signup|#|javascript:|mailto:|/amp/|/web-stories/|/photos/|/videos|/live-updates|/topic|/authors|/rss|/sitemap|/subscribe|/apps|/partner|/advertise|/feedback|/careers|/terms-of-use|/privacy-policy|/cookie-policy|/disclaimer|/archive|/newsletter|/faq|/press-release|/events|/jobs|/deals|/shop|/gallery|/embed|/widget|/premium|/plus|/epaper|/contactus)', full_url, re.IGNORECASE)
@@ -108,79 +105,65 @@ class NewsScraper:
                         
                         seen_urls.add(full_url)
 
-                        # --- Attempt to find a snippet/description on the homepage near the headline ---
+                        # --- Attempt to find a snippet/description within the current card element ---
                         snippet = None
-                        # Look for a sibling or child element that might contain a short snippet
-                        # These are common patterns for Reuters homepage snippets
-                        for selector in [
+                        snippet_selectors = [
                             'p.media-story-card__description__2g1Xp', # Specific class for description
                             'p[data-testid="Body"]', # Common data-testid for body text/snippet
                             'div.story-content p', # Paragraph within story content divs
-                            'div.card-content p', # Paragraph within general card content
-                            'div.article-excerpt p', # Paragraph within article excerpts
                             'p.text__text__1FZLe', # Common text class
-                        ]:
-                            # Try finding a direct child or a sibling's child
-                            potential_snippet_tag = link.select_one(selector) or \
-                                                    link.find_next_sibling(lambda tag: tag.name in ['p', 'div', 'span'] and tag.select_one(selector))
-                            
-                            if potential_snippet_tag:
-                                # If it's a parent, get the specific selector within it
-                                if link.select_one(selector):
-                                    snippet_text = link.select_one(selector).get_text(strip=True)
-                                else: # It's a sibling that contains the selector
-                                    snippet_text = potential_snippet_tag.select_one(selector).get_text(strip=True)
-
-                                if snippet_text and len(snippet_text) > 20 and len(snippet_text) < 300: # Heuristic length check
+                            'div.article-excerpt p', # Paragraph within article excerpts
+                        ]
+                        for s_selector in snippet_selectors:
+                            snippet_tag = card_element.select_one(s_selector)
+                            if snippet_tag:
+                                snippet_text = snippet_tag.get_text(strip=True)
+                                if snippet_text and len(snippet_text) > 20 and len(snippet_text) < 300 and snippet_text != title:
                                     snippet = snippet_text
-                                    break # Found a good snippet, stop searching for this link
+                                    break
                         
-                        # Fallback: if no specific snippet found, try to get a short text from the link's parent
+                        # Fallback for snippet if not found by specific selectors
                         if not snippet:
-                            parent_div = link.find_parent(lambda tag: tag.name in ['div', 'li', 'article'])
-                            if parent_div:
-                                # Get text from direct paragraph children of the parent, excluding the title itself
-                                for p_tag in parent_div.find_all('p'):
-                                    p_text = p_tag.get_text(strip=True)
-                                    if p_text and p_text != title and len(p_text) > 20 and len(p_text) < 300:
-                                        snippet = p_text
-                                        break
-                                # If still no snippet, try to extract a short text from the parent itself
-                                if not snippet:
-                                    parent_text = parent_div.get_text(separator=' ', strip=True)
-                                    # Remove title from parent_text to avoid redundancy
-                                    parent_text = parent_text.replace(title, '').strip()
-                                    if len(parent_text) > 50 and len(parent_text) < 300:
-                                        snippet = parent_text[:200] + '...' if len(parent_text) > 200 else parent_text
+                            # Try to get text from a general paragraph within the card, excluding the title
+                            for p_tag in card_element.find_all('p'):
+                                p_text = p_tag.get_text(strip=True)
+                                if p_text and p_text != title and len(p_text) > 20 and len(p_text) < 300:
+                                    snippet = p_text
+                                    break
                         
                         # Final fallback: Use a truncated version of the title if no snippet is found
                         if not snippet:
                             snippet = title[:100] + '...' if len(title) > 100 else title
 
-                        # --- Attempt to find an image URL for the headline card ---
+                        # --- Attempt to find an image URL for the headline card within the current element ---
                         image_url = None
-                        # Look for an image tag within the same parent container as the link
-                        parent_container = link.find_parent(class_=re.compile(r'story-card|media-story-card|cluster-item|article-excerpt', re.IGNORECASE))
-                        if parent_container:
-                            # Specific Reuters thumbnail selectors within headline containers
-                            thumbnail_selectors = [
-                                'img[data-testid="media-image"]',
-                                'img.media-story-card__image__2g1Xp',
-                                'img.media-object__image__3tY4J',
-                                'img.image__image__1g1Xp', # Generic image class
-                                'img[src*="thumb"]', # Images with 'thumb' in src
-                                'img[src*="small"]', # Images with 'small' in src
-                            ]
-                            for img_selector in thumbnail_selectors:
-                                img_tag = parent_container.select_one(img_selector)
-                                if img_tag and img_tag.get('src'):
-                                    img_src = urljoin(source_url, img_tag['src'])
-                                    # Filter out tiny icons/placeholders, ensure it's a valid image URL
-                                    if not re.search(r'(logo|icon|spacer|thumb-small|ads|gif|svg)\.(png|jpg|jpeg)', img_src, re.IGNORECASE) and \
-                                       not re.search(r'data:image', img_src, re.IGNORECASE) and \
-                                       ('width' in img_tag.attrs and int(img_tag['width']) > 50 or 'height' in img_tag.attrs and int(img_tag['height']) > 50):
-                                        image_url = img_src
-                                        break
+                        # Specific Reuters thumbnail selectors within the card element
+                        thumbnail_selectors = [
+                            'img[data-testid="media-image"]',
+                            'img.media-story-card__image__2g1Xp',
+                            'img.media-object__image__3tY4J',
+                            'img.image__image__1g1Xp', # Generic image class
+                            'img[src*="thumb"]', # Images with 'thumb' in src
+                            'img[src*="small"]', # Images with 'small' in src
+                            'div.media-object__media__1g1Xp img', # Image within a common media object container
+                            'div.Image_container img', # Another common image container
+                            'div.MediaItem_image img', # Another common image container
+                            'figure img', # General figure image
+                            'img.reuters-asset-image', # A common class for Reuters images
+                            'img[data-src]', # Sometimes images use data-src attribute
+                            'div.media-object__image-wrapper img', # Specific wrapper for images
+                            'div.media-story-card__image-wrapper img', # Another specific wrapper
+                        ]
+                        for img_selector in thumbnail_selectors:
+                            img_tag = card_element.select_one(img_selector) # Search within the current card element
+                            if img_tag and (img_tag.get('src') or img_tag.get('data-src')): # Check both src and data-src
+                                img_src = urljoin(source_url, img_tag.get('src') or img_tag.get('data-src'))
+                                # Filter out tiny icons/placeholders, ensure it's a valid image URL
+                                if not re.search(r'(logo|icon|spacer|thumb-small|ads|gif|svg)\.(png|jpg|jpeg)', img_src, re.IGNORECASE) and \
+                                   not re.search(r'data:image', img_src, re.IGNORECASE) and \
+                                   ('width' in img_tag.attrs and int(img_tag['width']) > 50 or 'height' in img_tag.attrs and int(img_tag['height']) > 50):
+                                    image_url = img_src
+                                    break
                         
                         # Fallback to a generic placeholder if no image is found for the headline
                         if not image_url:
