@@ -3,11 +3,15 @@ from flask import Flask, jsonify, session
 from datetime import datetime, timedelta
 from config import get_config
 import uuid
-from flask_cors import CORS
+from flask_cors import CORS # Import CORS
 
-app = Flask(__name__)
-CORS(app)  # allow all origins by default
 # Initialize Flask app
+app = Flask(__name__)
+
+# Enable CORS for all origins and all routes
+# For production, consider restricting origins: CORS(app, origins=["https://your-netlify-app.netlify.app"])
+CORS(app)
+
 # Load configuration based on environment
 app.config.from_object(get_config())
 
@@ -23,6 +27,22 @@ from api import api_bp
 
 app.register_blueprint(payment_bp, url_prefix='/payment')
 app.register_blueprint(api_bp, url_prefix='/api')
+
+# --- Initialize NewsScraper and AIService within an application context ---
+# This block runs when the 'app' object is created, which happens when Gunicorn imports app.py.
+# Using app.app_context() ensures current_app.config is available during instantiation.
+from api.news_scraper import NewsScraper
+from api.summarizer import AIService
+with app.app_context():
+    try:
+        app.config['NEWS_SCRAPER_INSTANCE'] = NewsScraper(app.config['NEWS_SOURCES'])
+        app.config['AI_SERVICE_INSTANCE'] = AIService()
+        app.logger.info("NewsScraper and AIService initialized successfully.")
+    except Exception as e:
+        app.logger.error(f"Failed to initialize NewsScraper or AIService: {e}")
+        # Depending on severity, you might want to exit or handle gracefully
+        # For now, we'll let the app start but log the error.
+
 
 # --- Before Request / User Management (Simplified for Demo) ---
 @app.before_request
@@ -84,6 +104,7 @@ def internal_error(error):
     return jsonify({"error": "Internal server error"}), 500
 
 if __name__ == '__main__':
+    # This block is only for local development, Gunicorn will not execute it.
     # Create a .env file if it doesn't exist to guide the user
     if not os.path.exists('.env'):
         with open('.env', 'w') as f:
@@ -98,7 +119,7 @@ if __name__ == '__main__':
             f.write("FLASK_ENV=development\n")
         print("Created a .env file. Please fill in your API keys and secrets.")
 
-    # Create necessary directories if they don't exist
+    # Create necessary directories if they don't exist (for local setup)
     os.makedirs('templates', exist_ok=True)
     os.makedirs('static', exist_ok=True)
     os.makedirs('utils', exist_ok=True)
@@ -106,15 +127,4 @@ if __name__ == '__main__':
     os.makedirs('api', exist_ok=True)
     os.makedirs('frontend', exist_ok=True) # Placeholder
 
-    # --- Initialize NewsScraper and AIService within an application context ---
-    # This ensures current_app.config is available when they are instantiated.
-    # These instances are then stored in app.config for later retrieval in routes.
-    from api.news_scraper import NewsScraper
-    from api.summarizer import AIService
-    with app.app_context():
-        app.config['NEWS_SCRAPER_INSTANCE'] = NewsScraper(app.config['NEWS_SOURCES'])
-        app.config['AI_SERVICE_INSTANCE'] = AIService()
-        # The AIService constructor might still raise an error if API keys are truly missing,
-        # but it will now do so within the context.
-
-    app.run(debug=True) # debug=True for development, set FLASK_ENV=production for production
+    app.run(debug=True) # debug=True for local development
