@@ -3,6 +3,9 @@ from flask import Flask, jsonify, session # Removed render_template, redirect, u
 from datetime import datetime, timedelta
 from config import get_config
 import uuid
+import sys
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+
 
 # Initialize Flask app
 app = Flask(__name__)
