@@ -12,7 +12,7 @@ class Config:
     
     # AI API Configuration - Now supporting OpenRouter
     AI_API_KEY = os.environ.get('AI_API_KEY') # Generic key, can be used for Gemini or OpenRouter
-    AI_MODEL_NAME = os.environ.get('AI_MODEL_NAME', 'gemini-pro') # Default to gemini-pro if not using OpenRouter
+    AI_MODEL_NAME = os.environ.get('AI_MODEL_NAME', 'gemini-pro') # Default to gemini-pro
     
     # OpenRouter Specific Configuration
     OPENROUTER_API_URL = os.environ.get('OPENROUTER_API_URL', "https://openrouter.ai/api/v1/chat/completions")
@@ -27,11 +27,10 @@ class Config:
     # News scraping configuration
     # Define multiple news sources as a list of dictionaries
     NEWS_SOURCES = [
-        {'name': 'Times of India', 'url': 'https://timesofindia.indiatimes.com/latest-news'},
         {'name': 'NDTV', 'url': 'https://www.ndtv.com/latest'},
         {'name': 'Hindustan Times', 'url': 'https://www.hindustantimes.com/latest-news'},
+        {'name': 'Times of India', 'url': 'https://timesofindia.indiatimes.com/'},
         # Add more Indian news sources here as needed
-        # Example: {'name': 'The Hindu', 'url': 'https://www.thehindu.com/latest-news/'},
     ]
 
 class DevelopmentConfig(Config):
