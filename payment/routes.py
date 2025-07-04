@@ -1,14 +1,10 @@
 import razorpay
 from flask import request, jsonify, current_app
 from payment import payment_bp
+from utils.access_control import grant_pro_access
 import hmac
 import hashlib
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from utils.access_control import grant_pro_access
-
+import uuid # Import the uuid module
 
 @payment_bp.route('/create-order', methods=['POST'])
 def create_order():
@@ -20,7 +16,9 @@ def create_order():
         data = request.get_json()
         amount = data.get('amount', 50000)  # Amount in paise (e.g., 50000 paise = INR 500)
         currency = data.get('currency', 'INR')
-        receipt = f"receipt_{current_app.config['CURRENT_USER_ID']}_{razorpay.utility.random_string(8)}"
+        
+        # Changed: Use uuid.uuid4().hex to generate a unique receipt ID
+        receipt = f"receipt_{current_app.config['CURRENT_USER_ID']}_{uuid.uuid4().hex}"
 
         client = razorpay.Client(auth=(current_app.config['RAZORPAY_KEY_ID'], current_app.config['RAZORPAY_KEY_SECRET']))
 
